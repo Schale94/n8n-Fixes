@@ -1,4 +1,4 @@
-# n8n-fixes
+# n8n-builds
 Real problems people have in daily computer work, fixed with n8n. Built in public.
 
 ## How it works
