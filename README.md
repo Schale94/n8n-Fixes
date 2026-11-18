@@ -1,21 +1,15 @@
 # n8n-fixes
+Real problems people have in daily computer work, fixed with n8n. Built in public.
 
-Real n8n workflows that broke in production, and how I fixed them.
+## How it works
+- One folder per build: workflow.json (importable, no credentials), README.md, synthetic sample data.
+- Every build starts from a real source (a person's question or a job post), described anonymously.
+- Each build README: Problem · Source type · Solution · Limits · How to import · Cost to run.
+- Time cap: 6 hours per build. What isn't finished goes under "Next".
 
-Status: starting 23 Nov 2026. No fixes published yet.
+## Builds
+None yet.
 
-## Format of each fix
-- Symptom: what broke and how it showed up
-- Cause: what actually failed
-- Fix: the change, with the corrected workflow JSON (no credentials, no client data)
-- Prevention: how to catch it earlier
-
-## How I work
-Every fix is reproduced on my own self-hosted n8n instance before I write it up.
-I use AI tools for research and drafting. I run and test every fix myself, and I stand behind what I publish.
-
-## License
-To be added before the first fix is published.
-
-## Contact
-LinkedIn: https://www.linkedin.com/in/dominiksadek/
+## Notes
+- All demo data is synthetic. No customer data, no credentials.
+- Follow along: linkedin.com/in/dsadek-builds · X @dsadek_builds
