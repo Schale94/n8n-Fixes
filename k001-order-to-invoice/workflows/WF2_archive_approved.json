@@ -1,0 +1,359 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "cb070d14-dd1d-454a-b199-e6b184210d3b",
+      "name": "Every 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "shipments"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "status",
+              "lookupValue": "odobreno"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5a14b903-e68e-48a8-9011-3185dc5eee05",
+      "name": "Read shipments (odobreno)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = [];\n$input.all().forEach(function (it) {\n  const s = it.json;\n  if (!s.shipment_id || !s.invoice_file_id || !s.packing_file_id) return;\n  if (String(s.archived_at || '').trim() !== '') return;\n  out.push({ json: { shipment_id: s.shipment_id, order_id: s.order_id, file_id: s.invoice_file_id, kind: 'INV' } });\n  out.push({ json: { shipment_id: s.shipment_id, order_id: s.order_id, file_id: s.packing_file_id, kind: 'PL' } });\n});\nreturn out;"
+      },
+      "id": "eb8b6520-1071-4149-a413-05175061afd5",
+      "name": "Split files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.file_id }}"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<FOLDER_ARCHIVE_ID>"
+        }
+      },
+      "id": "6efccabb-e529-4c46-827e-f8b6870211e9",
+      "name": "Move to K001_archive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        672,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const src = $('Split files').all().map(function (i) { return i.json; });\nconst res = $input.all().map(function (i) { return i.json; });\nconst by = {};\nsrc.forEach(function (s, idx) {\n  const r = res[idx] || {};\n  const ok = !r.error && r.id === s.file_id;\n  if (!by[s.shipment_id]) by[s.shipment_id] = { shipment_id: s.shipment_id, order_id: s.order_id, ok: true, error: '' };\n  if (!ok) {\n    by[s.shipment_id].ok = false;\n    const msg = r.error ? (typeof r.error === 'string' ? r.error : (r.error.message || JSON.stringify(r.error))) : 'move not confirmed';\n    by[s.shipment_id].error = (by[s.shipment_id].error ? by[s.shipment_id].error + '; ' : '') + s.kind + ': ' + String(msg).slice(0, 200);\n  }\n});\nconst now = $now.toISO();\nreturn Object.keys(by).map(function (k) {\n  const b = by[k];\n  return { json: { shipment_id: b.shipment_id, order_id: b.order_id, status: b.ok ? 'arhivirano' : 'greska_arhiva', archived_at: b.ok ? now : '', result: b.ok ? 'ok' : 'error', error: b.error } };\n});"
+      },
+      "id": "172a08a9-f6a0-454e-9676-5b3207cb4993",
+      "name": "Archive result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "shipments"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "shipment_id": "={{ $json.shipment_id }}",
+            "order_id": "={{ $json.order_id }}",
+            "status": "={{ $json.status }}",
+            "archived_at": "={{ $json.archived_at }}"
+          },
+          "matchingColumns": [
+            "shipment_id"
+          ],
+          "schema": [
+            {
+              "id": "shipment_id",
+              "displayName": "shipment_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_id",
+              "displayName": "order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "archived_at",
+              "displayName": "archived_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "917bc946-ef5f-4a01-a286-f0c0c62b0939",
+      "name": "Update shipment (arhivirano)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1120,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ts": "={{ $now.toISO() }}",
+            "order_id": "={{ $json.order_id }}",
+            "step": "archive",
+            "result": "={{ $(\"Archive result\").item.json.result }}",
+            "error": "={{ $(\"Archive result\").item.json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_id",
+              "displayName": "order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "step",
+              "displayName": "step",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fbab2821-6a1e-4293-862a-1ce5b2b642a8",
+      "name": "Log archive",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1344,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 5 min": {
+      "main": [
+        [
+          {
+            "node": "Read shipments (odobreno)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read shipments (odobreno)": {
+      "main": [
+        [
+          {
+            "node": "Split files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split files": {
+      "main": [
+        [
+          {
+            "node": "Move to K001_archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move to K001_archive": {
+      "main": [
+        [
+          {
+            "node": "Archive result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive result": {
+      "main": [
+        [
+          {
+            "node": "Update shipment (arhivirano)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update shipment (arhivirano)": {
+      "main": [
+        [
+          {
+            "node": "Log archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "name": "K001 WF2 archive approved"
+}

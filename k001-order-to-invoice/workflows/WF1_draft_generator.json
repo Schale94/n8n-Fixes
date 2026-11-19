@@ -1,0 +1,1520 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "64640cf2-9858-432f-bfa0-9029b6f8d4b6",
+      "name": "Every 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "orders"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "status",
+              "lookupValue": "novo"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0bb66acd-a8a1-440d-8ab7-f6f98f9b7e20",
+      "name": "Read orders (status novo)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "order_items"
+        },
+        "options": {}
+      },
+      "id": "d712aa3a-278c-48db-b1bc-abd6be90a07c",
+      "name": "Read order_items",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        448,
+        0
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "products"
+        },
+        "options": {}
+      },
+      "id": "0f7f7b7f-0d2d-4943-ba05-7379e95e1645",
+      "name": "Read products",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        672,
+        0
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "customers"
+        },
+        "options": {}
+      },
+      "id": "601f4984-8ae8-457a-848a-e1eaebcdda84",
+      "name": "Read customers",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        896,
+        0
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "shipments"
+        },
+        "options": {}
+      },
+      "id": "403ee22e-ef6b-4c0e-a3c9-a601497d0615",
+      "name": "Read shipments",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1120,
+        0
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const orders = $('Read orders (status novo)').all().map(function (i) { return i.json; });\nconst items = $('Read order_items').all().map(function (i) { return i.json; });\nconst products = $('Read products').all().map(function (i) { return i.json; });\nconst customers = $('Read customers').all().map(function (i) { return i.json; });\n\nconst INCOTERMS = ['EXW', 'FOB', 'CIF', 'DAP'];\nconst CURRENCIES = ['AED', 'USD', 'EUR'];\nconst MAX_LINES = 8;\nconst REQUIRED = ['order_id', 'order_date', 'customer_id', 'incoterm', 'currency', 'payment_terms', 'ship_to'];\n\nconst pMap = {};\nproducts.forEach(function (p) { pMap[p.sku] = p; });\nconst cMap = {};\ncustomers.forEach(function (c) { cMap[c.customer_id] = c; });\n\nconst out = [];\norders.forEach(function (o) {\n  const errors = [];\n  REQUIRED.forEach(function (f) {\n    if (o[f] === undefined || o[f] === null || String(o[f]).trim() === '') errors.push('missing ' + f);\n  });\n  const cust = cMap[o.customer_id];\n  if (o.customer_id && !cust) errors.push('unknown customer_id');\n  if (o.incoterm && INCOTERMS.indexOf(o.incoterm) === -1) errors.push('invalid incoterm');\n  if (o.currency && CURRENCIES.indexOf(o.currency) === -1) errors.push('invalid currency');\n\n  const lines = items\n    .filter(function (l) { return l.order_id === o.order_id; })\n    .sort(function (a, b) { return Number(a.line_no) - Number(b.line_no); });\n  if (lines.length === 0) errors.push('no lines');\n  if (lines.length > MAX_LINES) errors.push('more than ' + MAX_LINES + ' lines');\n\n  const enriched = lines.map(function (l) {\n    const p = pMap[l.sku];\n    const qty = Number(l.qty);\n    const price = Number(l.unit_price);\n    if (!p) errors.push('line ' + l.line_no + ': unknown sku ' + l.sku);\n    if (!Number.isInteger(qty) || qty <= 0) errors.push('line ' + l.line_no + ': qty must be an integer > 0');\n    if (!(price > 0)) errors.push('line ' + l.line_no + ': unit_price must be > 0');\n    if (p && (p.hs_code === undefined || String(p.hs_code).trim() === '')) errors.push('line ' + l.line_no + ': hs_code empty');\n    return {\n      line_no: Number(l.line_no),\n      sku: l.sku,\n      qty: qty,\n      unit_price: price,\n      description: p ? p.description : '',\n      origin: p ? p.origin : '',\n      unit_weight_kg: p ? Number(p.unit_weight_kg) : 0,\n      dims_cm: p ? p.dims_cm : '',\n      hs_code: p ? String(p.hs_code) : ''\n    };\n  });\n\n  out.push({ json: { order_id: o.order_id, valid: errors.length === 0, errors: errors, order: o, customer: cust || null, lines: enriched } });\n});\nreturn out;"
+      },
+      "id": "f7411f39-bf67-4f5a-b469-d24c974eefd9",
+      "name": "Code A: validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const shipments = $('Read shipments').all().map(function (i) { return i.json; }).filter(function (s) { return s.shipment_id; });\nconst year = $now.toFormat('yyyy');\nconst today = $now.toFormat('yyyy-MM-dd');\n\nfunction maxNum(field, prefix) {\n  let m = 0;\n  shipments.forEach(function (s) {\n    const v = String(s[field] || '');\n    if (v.indexOf(prefix) === 0) {\n      const n = parseInt(v.slice(prefix.length), 10);\n      if (n > m) m = n;\n    }\n  });\n  return m;\n}\nfunction pad(n) { return String(n).padStart(4, '0'); }\nfunction r2(n) { return Math.round(n * 100) / 100; }\n\nlet inv = maxNum('invoice_no', 'INV-' + year + '-');\nlet pl = maxNum('packing_no', 'PL-' + year + '-');\nlet sh = maxNum('shipment_id', 'SH-');\nconst PKG_KG = 25;\n\nconst out = [];\n$input.all().forEach(function (it) {\n  const d = it.json;\n  if (!d.valid) {\n    out.push({ json: d });\n    return;\n  }\n  inv += 1; pl += 1; sh += 1;\n  const lines = d.lines.map(function (l) {\n    return Object.assign({}, l, { line_total: r2(l.qty * l.unit_price), line_kg: r2(l.qty * l.unit_weight_kg) });\n  });\n  const subtotal = r2(lines.reduce(function (a, l) { return a + l.line_total; }, 0));\n  const totalKg = r2(lines.reduce(function (a, l) { return a + l.line_kg; }, 0));\n  out.push({ json: Object.assign({}, d, {\n    lines: lines,\n    subtotal: subtotal,\n    total: subtotal,\n    total_net_kg: totalKg,\n    packages_est: Math.ceil(totalKg / PKG_KG),\n    invoice_no: 'INV-' + year + '-' + pad(inv),\n    packing_no: 'PL-' + year + '-' + pad(pl),\n    shipment_id: 'SH-' + pad(sh),\n    invoice_date: today\n  }) });\n});\nreturn out;"
+      },
+      "id": "e45f7051-689b-4bc1-8f06-9daeff9d74eb",
+      "name": "Code B: totals and numbering",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "09e1b45b-842c-4fa5-9108-0fa04e60e56a",
+      "name": "If valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1792,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "shipments"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "shipment_id",
+              "id": "shipment_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "order_id",
+              "id": "order_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "packages_est",
+              "id": "packages_est",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "total_weight_kg",
+              "id": "total_weight_kg",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "invoice_no",
+              "id": "invoice_no",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "packing_no",
+              "id": "packing_no",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "status",
+              "id": "status",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "created_at",
+              "id": "created_at",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "created_at": "={{ $now.toISO() }}",
+            "invoice_no": "={{ $json.invoice_no }}",
+            "order_id": "={{ $json.order_id }}",
+            "packages_est": "={{ $json.packages_est }}",
+            "packing_no": "={{ $json.packing_no }}",
+            "shipment_id": "={{ $json.shipment_id }}",
+            "status": "u_obradi",
+            "total_weight_kg": "={{ $json.total_net_kg }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "1cb46dd5-d929-4a7d-b2ee-29c1381b64d4",
+      "name": "Reserve shipments row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2016,
+        -96
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "orders"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "order_id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "order_id",
+              "id": "order_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "status",
+              "id": "status",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "order_id": "={{ $json.order_id }}",
+            "status": "u_obradi"
+          }
+        },
+        "options": {}
+      },
+      "id": "3245c842-81c6-4891-a2eb-161e78a326fa",
+      "name": "Lock order (u_obradi)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2240,
+        -96
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "a3d1c023-aaf2-4a67-a77e-35a67f75787d",
+      "name": "Loop per order",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2464,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cur = $input.first().json;\nconst d = $('Code B: totals and numbering').all().map(function (i) { return i.json; }).filter(function (x) { return x.valid && x.order_id === cur.order_id; })[0];\nconst TPL_INVOICE = '<TEMPLATE_INVOICE_DOC_ID>';\nconst TPL_PACKING = '<TEMPLATE_PACKING_DOC_ID>';\nfunction f2(n) { return Number(n).toFixed(2); }\nconst pairs = {\n  invoice_no: d.invoice_no,\n  invoice_date: d.invoice_date,\n  packing_no: d.packing_no,\n  order_id: d.order.order_id,\n  order_date: d.order.order_date,\n  customer_name: d.customer.name,\n  customer_address: d.customer.address + ', ' + d.customer.country,\n  ship_to: d.order.ship_to,\n  incoterm: d.order.incoterm,\n  currency: d.order.currency,\n  payment_terms: d.order.payment_terms,\n  subtotal: f2(d.subtotal),\n  total: f2(d.total),\n  total_net_kg: f2(d.total_net_kg),\n  packages_est: d.packages_est\n};\nfor (let n = 1; n <= 8; n++) {\n  const l = d.lines[n - 1];\n  pairs['i' + n + '_n'] = l ? l.line_no : '';\n  pairs['i' + n + '_sku'] = l ? l.sku : '';\n  pairs['i' + n + '_desc'] = l ? l.description : '';\n  pairs['i' + n + '_qty'] = l ? l.qty : '';\n  pairs['i' + n + '_price'] = l ? f2(l.unit_price) : '';\n  pairs['i' + n + '_total'] = l ? f2(l.line_total) : '';\n  pairs['i' + n + '_ukg'] = l ? f2(l.unit_weight_kg) : '';\n  pairs['i' + n + '_lkg'] = l ? f2(l.line_kg) : '';\n  pairs['i' + n + '_dims'] = l ? l.dims_cm : '';\n  pairs['i' + n + '_origin'] = l ? l.origin : '';\n}\nconst requests = Object.keys(pairs).map(function (k) {\n  const v = pairs[k];\n  return { replaceAllText: { containsText: { text: '{{' + k + '}}', matchCase: true }, replaceText: (v === undefined || v === null) ? '' : String(v) } };\n});\nconst meta = { order_id: d.order_id, shipment_id: d.shipment_id, invoice_no: d.invoice_no, packing_no: d.packing_no };\nreturn [\n  { json: Object.assign({ kind: 'INV', templateId: TPL_INVOICE, docName: d.invoice_no + ' (doc)', pdfName: d.invoice_no + '.pdf', requests: requests }, meta) },\n  { json: Object.assign({ kind: 'PL', templateId: TPL_PACKING, docName: d.packing_no + ' (doc)', pdfName: d.packing_no + '.pdf', requests: requests }, meta) }\n];"
+      },
+      "id": "9659fb47-2372-4cb0-9549-37ba127b26c8",
+      "name": "Build Docs requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "copy",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.templateId }}"
+        },
+        "name": "={{ $json.docName }}",
+        "sameFolder": false,
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<FOLDER_TMP_ID>"
+        },
+        "options": {}
+      },
+      "id": "71b3293e-27d5-412f-b06b-d2f53aef8b92",
+      "name": "Copy template",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2912,
+        -96
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://docs.googleapis.com/v1/documents/{{ $json.id }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDocsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: $(\"Build Docs requests\").item.json.requests }) }}",
+        "options": {}
+      },
+      "id": "d6d30ad2-f2fc-493f-a2b9-4fc3812b69ba",
+      "name": "Docs batchUpdate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3136,
+        -96
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $(\"Copy template\").item.json.id }}"
+        },
+        "options": {
+          "binaryPropertyName": "data",
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "application/pdf"
+            }
+          },
+          "fileName": "={{ $(\"Build Docs requests\").item.json.pdfName }}"
+        }
+      },
+      "id": "d382e0f5-f0c7-40bc-b287-e2f13507b76b",
+      "name": "Export PDF",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3360,
+        -96
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "name": "={{ $(\"Build Docs requests\").item.json.pdfName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<FOLDER_DRAFT_ID>"
+        },
+        "options": {}
+      },
+      "id": "8a22e349-cdaa-4f8e-ad00-d546498212c7",
+      "name": "Upload PDF to K001_draft",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3584,
+        -96
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $('Build Docs requests').first().json;\nconst files = {};\n$input.all().forEach(function (it) { if (it.json && it.json.name && it.json.id) files[it.json.name] = it.json.id; });\nconst inv = files[b.invoice_no + '.pdf'];\nconst pl = files[b.packing_no + '.pdf'];\nif (!inv || !pl) return [];\nreturn [{ json: { order_id: b.order_id, shipment_id: b.shipment_id, invoice_file_id: inv, packing_file_id: pl } }];"
+      },
+      "id": "9feabe09-ea39-4c50-85ef-dc87784e6ca2",
+      "name": "Collect files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3808,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "shipments"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "shipment_id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "shipment_id",
+              "id": "shipment_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "order_id",
+              "id": "order_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "invoice_file_id",
+              "id": "invoice_file_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "packing_file_id",
+              "id": "packing_file_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "status",
+              "id": "status",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "invoice_file_id": "={{ $json.invoice_file_id }}",
+            "order_id": "={{ $json.order_id }}",
+            "packing_file_id": "={{ $json.packing_file_id }}",
+            "shipment_id": "={{ $json.shipment_id }}",
+            "status": "draft"
+          }
+        },
+        "options": {}
+      },
+      "id": "31f72dc2-addd-4554-be35-3c1c8d9bd99c",
+      "name": "Finalize shipment (draft)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4032,
+        -96
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "orders"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "order_id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "order_id",
+              "id": "order_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "status",
+              "id": "status",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "order_id": "={{ $json.order_id }}",
+            "status": "obradeno"
+          }
+        },
+        "options": {}
+      },
+      "id": "ff2ed22b-d65f-4f48-9e39-cf85aa7858fd",
+      "name": "Order done (obradeno)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4256,
+        -96
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "ts",
+              "id": "ts",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "order_id",
+              "id": "order_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "step",
+              "id": "step",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "result",
+              "id": "result",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "error",
+              "id": "error",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "error": "",
+            "order_id": "={{ $json.order_id }}",
+            "result": "ok",
+            "step": "draft",
+            "ts": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "2239cbc4-0c53-4cd6-b6a0-2ca6ad8fb15a",
+      "name": "Log ok",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4480,
+        -96
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $('Build Docs requests').first().json;\nlet msg = 'pdf chain error';\nconst first = $input.first();\nif (first && first.json && first.json.error) {\n  const e = first.json.error;\n  msg = (typeof e === 'string') ? e : (e.message || JSON.stringify(e));\n}\nreturn [{ json: { order_id: b.order_id, shipment_id: b.shipment_id, error: String(msg).slice(0, 300) } }];"
+      },
+      "id": "6ab9712c-9863-4291-9e4c-632116df5602",
+      "name": "Collect errors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "orders"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "order_id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "order_id",
+              "id": "order_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "status",
+              "id": "status",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "order_id": "={{ $json.order_id }}",
+            "status": "greska"
+          }
+        },
+        "options": {}
+      },
+      "id": "def53a40-e631-48b6-ba77-6e5c47716cd8",
+      "name": "Mark order greska",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3584,
+        208
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "shipments"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "shipment_id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "shipment_id",
+              "id": "shipment_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "status",
+              "id": "status",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "shipment_id": "={{ $('Collect errors').first().json.shipment_id }}",
+            "status": "greska"
+          }
+        },
+        "options": {}
+      },
+      "id": "d6ac0eee-a193-404f-a90c-2dc637d096f9",
+      "name": "Mark shipment greska",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3808,
+        208
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "ts",
+              "id": "ts",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "order_id",
+              "id": "order_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "step",
+              "id": "step",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "result",
+              "id": "result",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "error",
+              "id": "error",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "error": "={{ $('Collect errors').first().json.error }}",
+            "order_id": "={{ $('Collect errors').first().json.order_id }}",
+            "result": "error",
+            "step": "pdf",
+            "ts": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "f438ac8c-ac8c-446b-b0fa-8a811735eb07",
+      "name": "Log error",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4032,
+        208
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "ts",
+              "id": "ts",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "order_id",
+              "id": "order_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "step",
+              "id": "step",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "result",
+              "id": "result",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "error",
+              "id": "error",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "error": "={{ $json.errors.join('; ') }}",
+            "order_id": "={{ $json.order_id }}",
+            "result": "rejected",
+            "step": "validate",
+            "ts": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "c6abcd8d-95ec-4520-b6eb-4a66edbf90da",
+      "name": "Log rejected",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2016,
+        304
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<SPREADSHEET_ID>"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "orders"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "order_id"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "order_id",
+              "id": "order_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "status",
+              "id": "status",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "order_id": "={{ $json.order_id }}",
+            "status": "greska"
+          }
+        },
+        "options": {}
+      },
+      "id": "1f90812c-47cd-4707-9a18-b7f2ff54f6c4",
+      "name": "Mark order rejected",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2240,
+        304
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Your Google account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 5 min": {
+      "main": [
+        [
+          {
+            "node": "Read orders (status novo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read orders (status novo)": {
+      "main": [
+        [
+          {
+            "node": "Read order_items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read order_items": {
+      "main": [
+        [
+          {
+            "node": "Read products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read products": {
+      "main": [
+        [
+          {
+            "node": "Read customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read customers": {
+      "main": [
+        [
+          {
+            "node": "Read shipments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read shipments": {
+      "main": [
+        [
+          {
+            "node": "Code A: validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code A: validate": {
+      "main": [
+        [
+          {
+            "node": "Code B: totals and numbering",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code B: totals and numbering": {
+      "main": [
+        [
+          {
+            "node": "If valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If valid": {
+      "main": [
+        [
+          {
+            "node": "Reserve shipments row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reserve shipments row": {
+      "main": [
+        [
+          {
+            "node": "Lock order (u_obradi)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lock order (u_obradi)": {
+      "main": [
+        [
+          {
+            "node": "Loop per order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop per order": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Build Docs requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Docs requests": {
+      "main": [
+        [
+          {
+            "node": "Copy template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copy template": {
+      "main": [
+        [
+          {
+            "node": "Docs batchUpdate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Collect errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Docs batchUpdate": {
+      "main": [
+        [
+          {
+            "node": "Export PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Collect errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Export PDF": {
+      "main": [
+        [
+          {
+            "node": "Upload PDF to K001_draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Collect errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload PDF to K001_draft": {
+      "main": [
+        [
+          {
+            "node": "Collect files",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Collect errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect files": {
+      "main": [
+        [
+          {
+            "node": "Finalize shipment (draft)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize shipment (draft)": {
+      "main": [
+        [
+          {
+            "node": "Order done (obradeno)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order done (obradeno)": {
+      "main": [
+        [
+          {
+            "node": "Log ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log ok": {
+      "main": [
+        [
+          {
+            "node": "Loop per order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect errors": {
+      "main": [
+        [
+          {
+            "node": "Mark order greska",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark order greska": {
+      "main": [
+        [
+          {
+            "node": "Mark shipment greska",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark shipment greska": {
+      "main": [
+        [
+          {
+            "node": "Log error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log error": {
+      "main": [
+        [
+          {
+            "node": "Loop per order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log rejected": {
+      "main": [
+        [
+          {
+            "node": "Mark order rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "name": "K001 WF1 draft generator"
+}
